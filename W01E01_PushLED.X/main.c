@@ -11,17 +11,17 @@
 int main(void)
 {
     // Set PF5 (LED) as out
-    PORTF.DIR |= PIN5_bm;
-    PORTF.DIR &= ~PIN6_bm;
+    PORTF.DIRSET = PIN5_bm;
+    PORTF.DIRCLR = PIN6_bm;
     
     // The superloop
     while (1)
     {
         if (PORTF.IN & PIN6_bm) {
-            PORTF.OUT |= PIN5_bm;    
+            PORTF.OUTSET = PIN5_bm;    
         }
         else {
-            PORTF.OUT &= ~PIN5_bm;
+            PORTF.OUTCLR = PIN5_bm;
         }
     }
 }

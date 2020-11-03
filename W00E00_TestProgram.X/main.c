@@ -12,7 +12,7 @@ int main(void)
 {
     // Set PF5 (LED) as out
     PORTF.DIRSET = PIN5_bm;
-
+    
     // The superloop
     while (1)
     {
