@@ -10,14 +10,16 @@
 
 int main(void)
 {
-    // Set PF5 (LED) as out
-    PORTF.DIRSET = PIN5_bm;
+    VPORTB.DIR |= PIN2_bm;
     
     // The superloop
     while (1)
-    {
-        // Toggle LED ON/OFF every 1/2 seconds
-        _delay_ms(500);
-        PORTF.OUTTGL = PIN5_bm;
-    }
+    if (VPORTB.OUT & PIN2_bm)
+{
+    VPORTB.OUT &= ~PIN2_bm;
+}
+else
+{
+    VPORTB.OUT |= PIN2_bm;
+}
 }
