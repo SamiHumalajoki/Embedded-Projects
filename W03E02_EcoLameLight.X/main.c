@@ -23,8 +23,8 @@ int main(void) {
     // or releasing the button.
     PORTF.PIN6CTRL = PORT_ISC_BOTHEDGES_gc;
   
-    // Set IDLE sleep mode
-    set_sleep_mode(SLPCTRL_SMODE_IDLE_gc);
+    // Set sleep mode to Power-down.
+    set_sleep_mode(SLPCTRL_SMODE_PDOWN_gc);
     // enable interrupts
     sei();
     // The idle loop.
