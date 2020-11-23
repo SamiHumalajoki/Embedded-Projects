@@ -14,15 +14,15 @@
 #include <util/delay.h>
 #include <stdint.h>
 
-void pwm_period(uint8_t duty) {
-
+void pwm_period(uint8_t duty)
+{
     PORTF.OUTCLR = PIN5_bm;
     for (uint8_t i = 0; i < duty; i++)
     {
         _delay_us(7);
     }
     PORTF.OUTSET = PIN5_bm;
-    for (uint8_t i = 0; i < (0xff - duty); i++)
+    for (uint8_t i = 0; i < (UINT8_MAX - duty); i++)
     {
         _delay_us(7);
     }
@@ -30,7 +30,8 @@ void pwm_period(uint8_t duty) {
 
 enum State {Down, Up};
 
-int main(void) {
+int main(void) 
+{
     PORTF.DIRSET = PIN5_bm;
     PORTF.DIRCLR = PIN6_bm;
     enum State currentState = Down;

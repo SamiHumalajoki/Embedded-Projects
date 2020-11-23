@@ -11,15 +11,15 @@
 #include <util/delay.h>
 #include <stdint.h>
 
-void pwm_period(uint8_t duty) {
-  
+void pwm_period(uint8_t duty) 
+{  
     PORTF.OUTCLR = PIN5_bm;
     for (uint8_t i = 0; i < duty; i++)
     {
         _delay_us(7);
     }
     PORTF.OUTSET = PIN5_bm;
-    for (uint8_t i = 0; i < (0xff - duty); i++)
+    for (uint8_t i = 0; i < (UINT8_MAX - duty); i++)
     {
         _delay_us(7);
     }
@@ -33,11 +33,11 @@ int main(void)
     // The superloop
     while (1)
     {   
-        for (uint8_t duty = 1; duty <= 0xff; duty++)
+        for (uint8_t duty = 1; duty <= UINT8_MAX; duty++)
         {
             pwm_period(duty);
         }
-        for (uint8_t duty = 0xff; duty > 0; duty--)
+        for (uint8_t duty = UINT8_MAX; duty > 0; duty--)
         {
             pwm_period(duty);
         }
