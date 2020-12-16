@@ -4,8 +4,6 @@
  *
  * Created on 02 December 2020, 15:41
  */
-#define PERIOD_EXAMPLE_VALUE        (0x0100)
-#define DUTY_CYCLE_EXAMPLE_VALUE    (0x0000)
 
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
@@ -17,31 +15,31 @@
 /* set DACREF to 0.8 Volts for Vref = 1.5Volts */
 #define DACREF_VALUE    (0.8 * 256 / 1.5)
 
-#define TCB_CMP_EXAMPLE_VALUE   (0xeeff)
+#define TCB_CMP_EXAMPLE_VALUE   (0x80ff)
 
+void CLOCK_init (void);
+void TCB0_init(void);
+void SLPCTRL_init (void);
+void write_7_segment_display(int8_t value);
 void RTC_init(void);
 void PORT0_init (void);
 void AC0_init(void);
-void write_7_segment_display(int8_t value);
-void PORTA_init (void);
-void CLOCK_init (void);
-void SLPCTRL_init (void);
-void TCA0_init(void);
 
-
-volatile int8_t count = 0;
+volatile int16_t count = 0;
 volatile uint8_t running = 0;
 volatile uint16_t speed = 0x00ff;
 
 void CLOCK_init (void)
 {
     /* Enable writing to protected register */
-    CPU_CCP = CCP_IOREG_gc; 
-    /* Disable CLK_PER Prescaler */
-    CLKCTRL.MCLKCTRLB = 0 << CLKCTRL_PEN_bp; 
-    
+    CPU_CCP = CCP_IOREG_gc;
+    /* Enable Prescaler and set Prescaler Division to 64 */
+    //CLKCTRL.MCLKCTRLB = CLKCTRL_PEN_b | CLKCTRL_PDIV_64X_gc;
+     /* Disable CLK_PER Prescaler */
+    CLKCTRL.MCLKCTRLB = 0 << CLKCTRL_PEN_bp;
+  
     /* Enable writing to protected register */
-    CPU_CCP = CCP_IOREG_gc; 
+    CPU_CCP = CCP_IOREG_gc;
     /* Select 32KHz Internal Ultra Low Power Oscillator (OSCULP32K) */
     CLKCTRL.MCLKCTRLA = CLKCTRL_CLKSEL_OSCULP32K_gc;
     
@@ -52,42 +50,24 @@ void CLOCK_init (void)
     }
 }
 
+void TCB0_init (void)
+{
+    /* Load CCMP register with the period and duty cycle of the PWM */
+    TCB0.CCMP = TCB_CMP_EXAMPLE_VALUE;
+
+    /* Enable TCB0 and Divide CLK_PER by 2 */
+    TCB0.CTRLA |= TCB_ENABLE_bm;
+    TCB0.CTRLA |= TCB_CLKSEL_CLKDIV1_gc | TCB_RUNSTDBY_bm;
+    
+    /* Enable Pin Output and configure TCB in 8-bit PWM mode */
+    TCB0.CTRLB |= TCB_CCMPEN_bm;
+    TCB0.CTRLB |= TCB_CNTMODE_PWM8_gc;
+}
+
 void SLPCTRL_init (void)
 {
     /* Enable sleep mode and select Standby mode */
     SLPCTRL.CTRLA = SLPCTRL_SMODE_gm | SLPCTRL_SMODE_STDBY_gc;
-}
-
-void TCA0_init(void)
-{
-    /* set waveform output on PORT A */
-    PORTMUX.TCAROUTEA = PORTMUX_TCA0_PORTA_gc;
-    
-    TCA0.SINGLE.CTRLB = TCA_SINGLE_CMP0EN_bm            /* enable compare channel 0 */
-                      | TCA_SINGLE_WGMODE_DSBOTTOM_gc;    /* set dual-slope PWM mode */
-    
-    /* disable event counting */
-    TCA0.SINGLE.EVCTRL &= ~(TCA_SINGLE_CNTEI_bm); 
-    
-    /* set PWM frequency and duty cycle (50%) */
-    TCA0.SINGLE.PERBUF  = PERIOD_EXAMPLE_VALUE;       
-    TCA0.SINGLE.CMP0BUF = 0;  
-    
-    TCA0.SINGLE.CTRLA = TCA_SINGLE_CLKSEL_DIV4_gc        /* set clock source (sys_clk/4) */
-                      | TCA_SINGLE_ENABLE_bm;           /* start timer */
-}
-
-ISR(TCB0_INT_vect)
-{
-    TCB0.INTFLAGS = TCB_CAPT_bm; /* Clear the interrupt flag */
-    
-    if (running)
-    {
-        PORTA.OUTTGL = PIN2_bm;
-    }
-    else {
-        PORTA.OUTCLR = PIN2_bm;
-    }
 }
 
 void write_7_segment_display(int8_t value)
@@ -186,21 +166,18 @@ ISR(RTC_PIT_vect)
 {
     /* Clear flag by writing '1': */
     RTC.PITINTFLAGS = RTC_PI_bm;
-    write_7_segment_display(count);  
+    write_7_segment_display(count/1000);  
 }
 
  /* AC interrupt handling */
 ISR(AC0_AC_vect)
 {
-   
     count++;
-    if (count > 9)
+    if (count > 9999)
     {
         count = 0;
     }
-
     /* The interrupt flag has to be cleared manually */
-
     AC0.STATUS = AC_CMP_bm;
 }
 
@@ -208,28 +185,10 @@ void PORT0_init (void)
 {
 	/* Positive Input - Disable digital input buffer */
 	PORTD.PIN2CTRL = PORT_ISC_INPUT_DISABLE_gc;
-	/* Enable output buffer on port C */
-
-    PORTC.DIRSET = PIN0_bm | PIN1_bm | PIN2_bm | PIN3_bm | 
-                   PIN4_bm | PIN5_bm | PIN6_bm | PIN7_bm;
-    write_7_segment_display(0);
-}
-
-void PORTA_init (void)
-{
-    PORTA.DIRSET = PIN0_bm;
-}
-
-void PORTF_init (void) {
-    PORTF.DIRCLR = PIN6_bm;
-    // PF6 configured to trigger an interrupt when pushing down
-    // or releasing the button.
-    PORTF.PIN6CTRL = PORT_ISC_FALLING_gc;
 }
 
 void AC0_init(void)
 {
- 
     /* Negative input uses internal reference - voltage reference should be enabled */
     VREF.CTRLA = VREF_AC0REFSEL_1V5_gc;    /* Voltage reference at 1.5V */
     VREF.CTRLB = VREF_AC0REFEN_bm;         /* AC0 DACREF reference enable: enabled */
@@ -246,39 +205,22 @@ void AC0_init(void)
                | AC_OUTEN_bm;              /* Output Buffer Enable: enabled */
     
     AC0.INTCTRL = AC_CMP_bm;               /* Analog Comparator 0 Interrupt enabled */
-
 }
-
-ISR(PORTF_PORT_vect)
-{
-    // Clear all interrupt flags
-    PORTF.INTFLAGS = 0xff;
-    //TCB0.CCMPH += 0x10;
-    if (running)
-    {
-        running = 0;
-        count++;
-    }
-    else {
-        running = 1;
-        count--;
-    }
-}
-
 
 int main(void)
 {   
     
     CLOCK_init();
     SLPCTRL_init();
-    TCA0_init();
+    TCB0_init();
     RTC_init();
     
     PORT0_init();
     AC0_init();
     
-    PORTA_init();
-    PORTF_init();
+    PORTC.DIRSET = PIN0_bm | PIN1_bm | PIN2_bm | PIN3_bm | 
+                   PIN4_bm | PIN5_bm | PIN6_bm | PIN7_bm;
+    write_7_segment_display(0);
     
 
     sei();            /* Global interrupts enabled */
@@ -288,3 +230,4 @@ int main(void)
         sleep_mode();    
     }
 }
+
