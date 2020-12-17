@@ -12,22 +12,26 @@
 #include <string.h>
 #include <stdio.h>
 
-/* set DACREF to 0.8 Volts for Vref = 1.5Volts */
-#define DACREF_VALUE    (0.8 * 256 / 1.5)
+enum run_mode {stop, slow, medium, fast}; 
 
-#define TCB_CMP_EXAMPLE_VALUE   (0x80ff)
+/* set DACREF to 1.2 Volts for Vref = 1.5Volts */
+#define DACREF_VALUE    (1.2 * 256 / 1.5)
+
+#define SLOW_PWM_DUTY   (0x10)
+#define MEDIUM_PWM_DUTY (0x80)
+#define FAST_PWM_DUTY   (0xFF)
 
 void CLOCK_init (void);
-void TCB0_init(void);
+void TCB0_init (void);
 void SLPCTRL_init (void);
-void write_7_segment_display(int8_t value);
-void RTC_init(void);
+void write_7_segment_display (int8_t value);
+void RTC_init (void);
 void PORT0_init (void);
-void AC0_init(void);
+void AC0_init (void);
+void PORTF_init (void);
 
 volatile int16_t count = 0;
-volatile uint8_t running = 0;
-volatile uint16_t speed = 0x00ff;
+volatile enum run_mode current_run_mode = stop;
 
 void CLOCK_init (void)
 {
@@ -53,15 +57,14 @@ void CLOCK_init (void)
 void TCB0_init (void)
 {
     /* Load CCMP register with the period and duty cycle of the PWM */
-    TCB0.CCMP = TCB_CMP_EXAMPLE_VALUE;
+    TCB0.CCMPL = UINT8_MAX;
+    TCB0.CCMPH = 0;
 
-    /* Enable TCB0 and Divide CLK_PER by 2 */
-    TCB0.CTRLA |= TCB_ENABLE_bm;
-    TCB0.CTRLA |= TCB_CLKSEL_CLKDIV1_gc | TCB_RUNSTDBY_bm;
+    /* Enable TCB0 and make it run in standby mode */
+    TCB0.CTRLA |= TCB_ENABLE_bm | TCB_CLKSEL_CLKDIV1_gc | TCB_RUNSTDBY_bm;
     
-    /* Enable Pin Output and configure TCB in 8-bit PWM mode */
-    TCB0.CTRLB |= TCB_CCMPEN_bm;
-    TCB0.CTRLB |= TCB_CNTMODE_PWM8_gc;
+    /* Enable Pin Output to PA2 and configure TCB in 8-bit PWM mode */
+    TCB0.CTRLB |= TCB_CCMPEN_bm | TCB_CNTMODE_PWM8_gc;
 }
 
 void SLPCTRL_init (void)
@@ -114,7 +117,7 @@ void write_7_segment_display(int8_t value)
     }
 }
 
-// The "borrowed" RTC initialization routine
+/* The RTC initialization routine */
 void RTC_init(void)
 {
     uint8_t temp;
@@ -161,22 +164,34 @@ void RTC_init(void)
                  | RTC_PITEN_bm; /* Enable: enabled */
 }
 
-// Interrupt service routine triggered by RTC
+/* Interrupt service routine triggered by RTC */
 ISR(RTC_PIT_vect)
 {
     /* Clear flag by writing '1': */
     RTC.PITINTFLAGS = RTC_PI_bm;
-    write_7_segment_display(count/1000);  
+    
+    /* Indicate that the device is running by flashing the on-board LED */
+    if (current_run_mode != stop)
+    {
+        PORTF.OUTTGL = PIN5_bm;
+    }
+    
+    /* The count equals half-rounds in half second, which is directly rounds
+     per second, so round per minute count is just 60 times of that.*/
+    
+    //write_7_segment_display(count);
+    uint16_t RPM = 60 * count;
+    count = 0;
+    write_7_segment_display(RPM / 1000);
 }
 
  /* AC interrupt handling */
 ISR(AC0_AC_vect)
 {
+    /* The count-value gets incremented every time the propellor passes
+     the gap between LDR and LED*/
     count++;
-    if (count > 9999)
-    {
-        count = 0;
-    }
+    //if (count > 9) {count = 0;}
     /* The interrupt flag has to be cleared manually */
     AC0.STATUS = AC_CMP_bm;
 }
@@ -189,32 +204,77 @@ void PORT0_init (void)
 
 void AC0_init(void)
 {
-    /* Negative input uses internal reference - voltage reference should be enabled */
-    VREF.CTRLA = VREF_AC0REFSEL_1V5_gc;    /* Voltage reference at 1.5V */
-    VREF.CTRLB = VREF_AC0REFEN_bm;         /* AC0 DACREF reference enable: enabled */
-
-    AC0.DACREF = DACREF_VALUE;             /* Set DAC voltage reference */
+    /* Negative input uses internal reference */
+    /* Voltage reference at 1.5V */
+    VREF.CTRLA = VREF_AC0REFSEL_1V5_gc;    
+    
+    /* AC0 DACREF reference enable: enabled */
+    VREF.CTRLB = VREF_AC0REFEN_bm;         
+    
+    /* Set DAC voltage reference */
+    AC0.DACREF = DACREF_VALUE;             
 
     /*Select proper inputs for comparator*/
-    AC0.MUXCTRLA = AC_MUXPOS_PIN0_gc       /* Positive Input - Analog Positive Pin 0 */
-                | AC_MUXNEG_DACREF_gc;     /* Negative Input - DAC Voltage Reference */
+    /* Positive Input - Analog Positive Pin 0 */
+    /* Negative Input - DAC Voltage Reference */
+    AC0.MUXCTRLA = AC_MUXPOS_PIN0_gc       
+                | AC_MUXNEG_DACREF_gc;     
     
+    /* Enable analog comparator, make it cause an interrupt at positive edge
+     * and select large hysteresis mode */
     AC0.CTRLA = AC_ENABLE_bm
                | AC_INTMODE_POSEDGE_gc
-               | AC_HYSMODE_50mV_gc        /* Enable analog comparator */
-               | AC_OUTEN_bm;              /* Output Buffer Enable: enabled */
+               | AC_HYSMODE_50mV_gc;        
     
-    AC0.INTCTRL = AC_CMP_bm;               /* Analog Comparator 0 Interrupt enabled */
+    /* Analog Comparator 0 Interrupt enabled */
+    AC0.INTCTRL = AC_CMP_bm;               
+}
+
+void PORTF_init(void)
+{
+    PORTF.PIN6CTRL = PORT_ISC_FALLING_gc;
+    PORTF.DIRSET = PIN5_bm;
+    PORTF.OUTSET = PIN5_bm;
+}
+
+/* Interrupt routine for on-board button*/
+ISR(PORTF_PORT_vect)
+{
+    /* Clear all interrupt flags */
+    PORTF.INTFLAGS = UINT8_MAX;
+    
+    /* Cycle the run mode: stop -> slow -> medium -> fast -> stop...
+     and set the according PWM duty cycle*/
+    switch (current_run_mode)
+    {
+        case stop :
+            current_run_mode = slow;
+            TCB0.CCMPH = SLOW_PWM_DUTY;
+            break;
+        case slow :
+            current_run_mode = medium;
+            TCB0.CCMPH = MEDIUM_PWM_DUTY;
+            break;
+        case medium :
+            current_run_mode = fast;
+            TCB0.CCMPH = FAST_PWM_DUTY;
+            break;
+        case fast :
+            current_run_mode = stop;
+            TCB0.CCMPH = 0;
+            PORTF.OUTSET = PIN5_bm;
+            break;
+    }
 }
 
 int main(void)
 {   
-    
+    /* Run all the initializing routines */
     CLOCK_init();
     SLPCTRL_init();
     TCB0_init();
     RTC_init();
-    
+    PORTF_init();
     PORT0_init();
     AC0_init();
     
@@ -222,9 +282,10 @@ int main(void)
                    PIN4_bm | PIN5_bm | PIN6_bm | PIN7_bm;
     write_7_segment_display(0);
     
-
-    sei();            /* Global interrupts enabled */
-
+    /* Global interrupts enabled */
+    sei();
+    
+    /* */
     while (1) 
     {
         sleep_mode();    

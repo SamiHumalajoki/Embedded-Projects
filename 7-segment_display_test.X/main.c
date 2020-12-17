@@ -13,20 +13,6 @@
 
 uint8_t count = 0;
 
-void pwm_period(uint8_t duty)
-{
-    PORTA.OUTSET = PIN2_bm;
-    for (uint8_t i = 0; i < duty; i++)
-    {
-        _delay_us(100);
-    }
-    PORTA.OUTCLR = PIN2_bm;
-    for (uint8_t i = 0; i < (9 - duty); i++)
-    {
-        _delay_us(100);
-    }
-}
-
 void set(uint8_t value)
 {
     switch (value)
@@ -98,8 +84,7 @@ int main(void) {
     while (1)
     {
         //  Keep re-entering sleep mode after each interrupt wake-up
-        // sleep_mode();
-        //pwm_period(count);
+        sleep_mode();
     }
 }
 
