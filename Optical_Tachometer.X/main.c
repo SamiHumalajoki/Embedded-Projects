@@ -1,6 +1,6 @@
 /*
  * File:   main.c
- * Author: dtek0068
+ * Author: Sami Humalajoki
  *
  * Created on 02 December 2020, 15:41
  */
@@ -15,11 +15,10 @@
 enum run_mode {stop, slow, medium, fast}; 
 
 /* set DACREF to 1.2 Volts for Vref = 1.5Volts */
-#define DACREF_VALUE    (1.2 * 256 / 1.5)
-
+#define DACREF_VALUE    (1.3 * 256 / 1.5)
 #define SLOW_PWM_DUTY   (0x10)
-#define MEDIUM_PWM_DUTY (0x80)
-#define FAST_PWM_DUTY   (0xFF)
+#define MEDIUM_PWM_DUTY (0x20)
+#define FAST_PWM_DUTY   (0x40)
 
 void CLOCK_init (void);
 void TCB0_init (void);
@@ -37,13 +36,13 @@ void CLOCK_init (void)
 {
     /* Enable writing to protected register */
     CPU_CCP = CCP_IOREG_gc;
-    /* Enable Prescaler and set Prescaler Division to 64 */
-    //CLKCTRL.MCLKCTRLB = CLKCTRL_PEN_b | CLKCTRL_PDIV_64X_gc;
+
      /* Disable CLK_PER Prescaler */
     CLKCTRL.MCLKCTRLB = 0 << CLKCTRL_PEN_bp;
   
     /* Enable writing to protected register */
     CPU_CCP = CCP_IOREG_gc;
+    
     /* Select 32KHz Internal Ultra Low Power Oscillator (OSCULP32K) */
     CLKCTRL.MCLKCTRLA = CLKCTRL_CLKSEL_OSCULP32K_gc;
     
@@ -73,6 +72,8 @@ void SLPCTRL_init (void)
     SLPCTRL.CTRLA = SLPCTRL_SMODE_gm | SLPCTRL_SMODE_STDBY_gc;
 }
 
+/* Outputs the input value to the seven segment display by first clearing
+ * all the output pins and then setting the needed pins high*/
 void write_7_segment_display(int8_t value)
 {
 
@@ -179,10 +180,10 @@ ISR(RTC_PIT_vect)
     /* The count equals half-rounds in half second, which is directly rounds
      per second, so round per minute count is just 60 times of that.*/
     
-    //write_7_segment_display(count);
     uint16_t RPM = 60 * count;
     count = 0;
     write_7_segment_display(RPM / 1000);
+    
 }
 
  /* AC interrupt handling */
@@ -191,7 +192,7 @@ ISR(AC0_AC_vect)
     /* The count-value gets incremented every time the propellor passes
      the gap between LDR and LED*/
     count++;
-    //if (count > 9) {count = 0;}
+ 
     /* The interrupt flag has to be cleared manually */
     AC0.STATUS = AC_CMP_bm;
 }
@@ -221,15 +222,16 @@ void AC0_init(void)
                 | AC_MUXNEG_DACREF_gc;     
     
     /* Enable analog comparator, make it cause an interrupt at positive edge
-     * and select large hysteresis mode */
+     * and select medium hysteresis mode */
     AC0.CTRLA = AC_ENABLE_bm
                | AC_INTMODE_POSEDGE_gc
-               | AC_HYSMODE_50mV_gc;        
+               | AC_HYSMODE_25mV_gc;        
     
     /* Analog Comparator 0 Interrupt enabled */
     AC0.INTCTRL = AC_CMP_bm;               
 }
 
+/* Initializing on-board button and LED*/
 void PORTF_init(void)
 {
     PORTF.PIN6CTRL = PORT_ISC_FALLING_gc;
@@ -278,6 +280,7 @@ int main(void)
     PORT0_init();
     AC0_init();
     
+    /* Write zero to the seven segment display*/
     PORTC.DIRSET = PIN0_bm | PIN1_bm | PIN2_bm | PIN3_bm | 
                    PIN4_bm | PIN5_bm | PIN6_bm | PIN7_bm;
     write_7_segment_display(0);
@@ -285,7 +288,7 @@ int main(void)
     /* Global interrupts enabled */
     sei();
     
-    /* */
+    /* Keep returning into sleep mode*/
     while (1) 
     {
         sleep_mode();    
